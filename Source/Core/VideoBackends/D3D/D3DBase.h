@@ -59,6 +59,11 @@ bool BGRATexturesSupported();
 
 unsigned int GetMaxTextureSize();
 
+ID3D11RasterizerState*   GetRasterizerState( D3D11_RASTERIZER_DESC const&, char const* debugNameOnCreation = nullptr);
+ID3D11BlendState*        GetBlendState( D3D11_BLEND_DESC const&, char const* debugNameOnCreation = nullptr);
+ID3D11DepthStencilState* GetDepthStencilState( D3D11_DEPTH_STENCIL_DESC const&, char const* debugNameOnCreation = nullptr);
+ID3D11SamplerState*      GetSamplerState( D3D11_SAMPLER_DESC const&, char const* debugNameOnCreation = nullptr);
+
 // Ihis function will assign a name to the given resource.
 // The DirectX debug layer will make it easier to identify resources that way,
 // e.g. when listing up all resources who have unreleased references.
