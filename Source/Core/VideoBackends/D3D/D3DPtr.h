@@ -35,7 +35,7 @@ struct ToAddrImpl {
 		ptr_.reset(temp_);
 	}
 
-	operator void**() { return &temp_; }
+	operator void**() { return (void**)&temp_; }
 	operator T**() { return &temp_; }
 private:
 	UniquePtr<T> & ptr_;

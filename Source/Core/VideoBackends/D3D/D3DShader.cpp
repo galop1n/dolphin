@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "VideoBackends/D3D/D3DPtr.h"
 #include "VideoBackends/D3D/D3DBase.h"
 #include "VideoBackends/D3D/D3DShader.h"
 #include "VideoCommon/VideoConfig.h"
@@ -141,6 +142,25 @@ ID3D11PixelShader* CreatePixelShaderFromByteCode(const void* bytecode, unsigned 
 	return p_shader;
 }
 
+u32 ReflectTextureMask( const void* code, unsigned int len ) {
+	UniquePtr<ID3D11ShaderReflection> reflect;
+	PD3DReflect( code, len, IID_ID3D11ShaderReflection, ToAddr(reflect) );
+	if (!reflect)
+		return u32(-1);
+
+	u32 mask = 0;
+	D3D11_SHADER_DESC desc;
+	reflect->GetDesc( &desc );
+
+	for( int i{}; i != desc.BoundResources; ++i ) {
+		D3D11_SHADER_INPUT_BIND_DESC idesc;
+		reflect->GetResourceBindingDesc(i, &idesc );
+		if( idesc.Type == D3D_SIT_TEXTURE) {
+			mask |= 1 << idesc.BindPoint;
+		}
+	}
+	return mask;
+};
 // code->bytecode
 bool CompilePixelShader(const char* code, unsigned int len, D3DBlob** blob,
 	const D3D_SHADER_MACRO* pDefines)
