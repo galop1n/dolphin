@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "Common/Common.h"
+#include "D3DWrapDeviceContext.h"
 
 namespace DX11
 {
@@ -39,7 +40,7 @@ HRESULT Create(HWND wnd);
 void Close();
 
 extern ID3D11Device* device;
-extern ID3D11DeviceContext* context;
+extern WrapDeviceContext context;
 extern IDXGISwapChain* swapchain;
 extern bool bFrameInProgress;
 
