@@ -527,6 +527,7 @@ bool PixelShaderCache::InsertByteCode(const PixelShaderUid &uid, const void* byt
 	// Make an entry in the table
 	PSCacheEntry newentry;
 	newentry.shader = shader;
+	newentry.mask_ = D3D::ReflectTextureMask(bytecode, bytecodelen);
 	PixelShaders[uid] = newentry;
 	last_entry = &PixelShaders[uid];
 

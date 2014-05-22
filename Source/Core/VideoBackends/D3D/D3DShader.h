@@ -18,6 +18,7 @@ namespace D3D
 	ID3D11VertexShader* CreateVertexShaderFromByteCode(const void* bytecode, unsigned int len);
 	ID3D11GeometryShader* CreateGeometryShaderFromByteCode(const void* bytecode, unsigned int len);
 	ID3D11PixelShader* CreatePixelShaderFromByteCode(const void* bytecode, unsigned int len);
+	u32 ReflectTextureMask( const void* code, unsigned int len );
 
 	// The returned bytecode buffers should be Release()d.
 	bool CompileVertexShader(const char* code, unsigned int len,

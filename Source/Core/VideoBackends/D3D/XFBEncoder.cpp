@@ -281,6 +281,7 @@ void XFBEncoder::Encode(u8* dst, u32 width, u32 height, const EFBRectangle& srcR
 
 	D3D::context->PSSetShader(m_pShader, nullptr, 0);
 	D3D::context->VSSetShader(m_vShader, nullptr, 0);
+	D3D::context->GSSetShader(nullptr, nullptr, 0);
 
 	D3D::stateman->PushBlendState(m_xfbEncodeBlendState);
 	D3D::stateman->PushDepthState(m_xfbEncodeDepthState);
@@ -345,6 +346,7 @@ void XFBEncoder::Encode(u8* dst, u32 width, u32 height, const EFBRectangle& srcR
 
 	D3D::context->PSSetShader(nullptr, nullptr, 0);
 	D3D::context->VSSetShader(nullptr, nullptr, 0);
+	D3D::context->GSSetShader(nullptr, nullptr, 0);
 
 	// Transfer staging buffer to GameCube/Wii RAM
 

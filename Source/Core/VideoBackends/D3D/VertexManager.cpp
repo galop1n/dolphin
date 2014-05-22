@@ -145,6 +145,7 @@ void VertexManager::Draw(UINT stride)
 		          D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP : 
 		          D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 		D3D::context->IASetPrimitiveTopology(pt);
+		D3D::context->GSSetShader(nullptr, nullptr, 0);
 		D3D::context->DrawIndexed(IndexGenerator::GetIndexLen(), m_index_draw_offset, 0);
 		INCSTAT(stats.thisFrame.numIndexedDrawCalls);
 	}
@@ -168,7 +169,6 @@ void VertexManager::Draw(UINT stride)
 			D3D::context->DrawIndexed(IndexGenerator::GetIndexLen(), m_index_draw_offset, 0);
 			INCSTAT(stats.thisFrame.numIndexedDrawCalls);
 
-			D3D::context->GSSetShader(nullptr, nullptr, 0);
 			((DX11::Renderer*)g_renderer)->RestoreCull();
 		}
 	}
@@ -192,7 +192,6 @@ void VertexManager::Draw(UINT stride)
 			D3D::context->DrawIndexed(IndexGenerator::GetIndexLen(), m_index_draw_offset, 0);
 			INCSTAT(stats.thisFrame.numIndexedDrawCalls);
 
-			D3D::context->GSSetShader(nullptr, nullptr, 0);
 			((DX11::Renderer*)g_renderer)->RestoreCull();
 		}
 	}
@@ -212,6 +211,9 @@ void VertexManager::vFlush(bool useDstAlpha)
 		GFX_DEBUGGER_PAUSE_LOG_AT(NEXT_ERROR,true,{printf("Fail to set pixel shader\n");});
 		return;
 	}
+
+	FlushTextures(PixelShaderCache::GetActiveMask());
+
 	PrepareDrawBuffers();
 	unsigned int stride = g_nativeVertexFmt->GetVertexStride();
 	g_nativeVertexFmt->SetupVertexPointers();

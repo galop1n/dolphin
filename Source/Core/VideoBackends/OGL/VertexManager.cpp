@@ -152,6 +152,7 @@ void VertexManager::vFlush(bool useDstAlpha)
 		ProgramShaderCache::SetShader(DSTALPHA_NONE,g_nativeVertexFmt->m_components);
 	}
 
+	FlushTextures(u32(-1));
 	// upload global constants
 	ProgramShaderCache::UploadConstants();
 
