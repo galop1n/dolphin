@@ -59,14 +59,12 @@ void VertexManager::CreateDeviceObjects()
 	m_current_index_buffer = 0;
 	m_index_buffer_cursor = IBUFFER_SIZE;
 	m_vertex_buffer_cursor = VBUFFER_SIZE;
-	m_lineShader.Init();
-	m_pointShader.Init();
+	m_lineAndPointShader.Init();
 }
 
 void VertexManager::DestroyDeviceObjects()
 {
-	m_pointShader.Shutdown();
-	m_lineShader.Shutdown();
+	m_lineAndPointShader.Shutdown();
 	for (m_current_vertex_buffer = 0; m_current_vertex_buffer < MAX_VBUFFER_COUNT; m_current_vertex_buffer++)
 	{
 		SAFE_RELEASE(m_vertex_buffers[m_current_vertex_buffer]);
@@ -159,7 +157,7 @@ void VertexManager::Draw(UINT stride)
 		for (int i = 0; i < 8; ++i)
 			texOffsetEnable[i] = bpmem.texcoords[i].s.line_offset;
 
-		if (m_lineShader.SetShader(g_nativeVertexFmt->m_components, lineWidth,
+		if (m_lineAndPointShader.SetLineShader(g_nativeVertexFmt->m_components, lineWidth,
 			texOffset, vpWidth, vpHeight, texOffsetEnable))
 		{
 			((DX11::Renderer*)g_renderer)->ApplyCullDisable(); // Disable culling for lines and points
@@ -183,7 +181,7 @@ void VertexManager::Draw(UINT stride)
 		for (int i = 0; i < 8; ++i)
 			texOffsetEnable[i] = bpmem.texcoords[i].s.point_offset;
 
-		if (m_pointShader.SetShader(g_nativeVertexFmt->m_components, pointSize,
+		if (m_lineAndPointShader.SetPointShader(g_nativeVertexFmt->m_components, pointSize,
 			texOffset, vpWidth, vpHeight, texOffsetEnable))
 		{
 			((DX11::Renderer*)g_renderer)->ApplyCullDisable(); // Disable culling for lines and points

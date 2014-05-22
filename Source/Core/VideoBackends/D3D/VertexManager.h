@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include "VideoBackends/D3D/LineGeometryShader.h"
-#include "VideoBackends/D3D/PointGeometryShader.h"
+#include "VideoBackends/D3D/LineAndPointGeometryShader.h"
 #include "VideoCommon/VertexManagerBase.h"
 
 namespace DX11
@@ -42,8 +41,7 @@ private:
 	PID3D11Buffer* m_index_buffers;
 	PID3D11Buffer* m_vertex_buffers;
 
-	LineGeometryShader m_lineShader;
-	PointGeometryShader m_pointShader;
+	LineAndPointGeometryShader m_lineAndPointShader;
 
 	std::vector<u8> LocalVBuffer;
 	std::vector<u16> LocalIBuffer;

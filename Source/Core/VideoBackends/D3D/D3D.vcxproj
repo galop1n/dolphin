@@ -50,12 +50,11 @@
     <ClCompile Include="D3DUtil.cpp" />
     <ClCompile Include="FramebufferManager.cpp" />
     <ClCompile Include="GfxState.cpp" />
-    <ClCompile Include="LineGeometryShader.cpp" />
+    <ClCompile Include="LineAndPointGeometryShader.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="NativeVertexFormat.cpp" />
     <ClCompile Include="PerfQuery.cpp" />
     <ClCompile Include="PixelShaderCache.cpp" />
-    <ClCompile Include="PointGeometryShader.cpp" />
     <ClCompile Include="PSTextureEncoder.cpp" />
     <ClCompile Include="Render.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -78,11 +77,10 @@
     <ClInclude Include="FramebufferManager.h" />
     <ClInclude Include="GfxState.h" />
     <ClInclude Include="Globals.h" />
-    <ClInclude Include="LineGeometryShader.h" />
+    <ClInclude Include="LineAndPointGeometryShader.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="PerfQuery.h" />
     <ClInclude Include="PixelShaderCache.h" />
-    <ClInclude Include="PointGeometryShader.h" />
     <ClInclude Include="PSTextureEncoder.h" />
     <ClInclude Include="Render.h" />
     <ClInclude Include="stdafx.h" />
