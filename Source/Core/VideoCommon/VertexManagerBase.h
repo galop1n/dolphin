@@ -39,6 +39,7 @@ public:
 	static u32 GetRemainingIndices(int primitive);
 
 	static void Flush();
+	static void FlushTextures( u32 mask = u32(-1) );
 
 	virtual ::NativeVertexFormat* CreateNativeVertexFormat() = 0;
 

@@ -142,6 +142,44 @@ u32 VertexManager::GetRemainingIndices(int primitive)
 	}
 }
 
+void VertexManager::FlushTextures(u32 mask)
+{
+	u32 usedtextures = 0;
+	for (u32 i = 0; i < bpmem.genMode.numtevstages + 1u; ++i)
+		if (bpmem.tevorders[i / 2].getEnable(i & 1))
+			usedtextures |= 1 << bpmem.tevorders[i/2].getTexMap(i & 1);
+
+	if (bpmem.genMode.numindstages > 0)
+		for (unsigned int i = 0; i < bpmem.genMode.numtevstages + 1u; ++i)
+			if (bpmem.tevind[i].IsActive() && bpmem.tevind[i].bt < bpmem.genMode.numindstages)
+				usedtextures |= 1 << bpmem.tevindref.getTexMap(bpmem.tevind[i].bt);
+
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if ( mask & usedtextures & (1 << i))
+		{
+			g_renderer->SetSamplerState(i & 3, i >> 2);
+			const FourTexUnits &tex = bpmem.tex[i >> 2];
+			const TextureCache::TCacheEntryBase* tentry = TextureCache::Load(i,
+				(tex.texImage3[i&3].image_base/* & 0x1FFFFF*/) << 5,
+				tex.texImage0[i&3].width + 1, tex.texImage0[i&3].height + 1,
+				tex.texImage0[i&3].format, tex.texTlut[i&3].tmem_offset<<9,
+				tex.texTlut[i&3].tlut_format,
+				((tex.texMode0[i&3].min_filter & 3) != 0),
+				(tex.texMode1[i&3].max_lod + 0xf) / 0x10,
+				(tex.texImage1[i&3].image_type != 0));
+
+			if (tentry)
+			{
+				// 0s are probably for no manual wrapping needed.
+				PixelShaderManager::SetTexDims(i, tentry->native_width, tentry->native_height, 0, 0);
+			}
+			else
+				ERROR_LOG(VIDEO, "error loading texture");
+		}
+	}
+}
+
 void VertexManager::Flush()
 {
 	if (IsFlushed) return;
@@ -179,40 +217,7 @@ void VertexManager::Flush()
 		bpmem.genMode.numtexgens, (u32)bpmem.dstalpha.enable, (bpmem.alpha_test.hex>>16)&0xff);
 #endif
 
-	u32 usedtextures = 0;
-	for (u32 i = 0; i < bpmem.genMode.numtevstages + 1u; ++i)
-		if (bpmem.tevorders[i / 2].getEnable(i & 1))
-			usedtextures |= 1 << bpmem.tevorders[i/2].getTexMap(i & 1);
-
-	if (bpmem.genMode.numindstages > 0)
-		for (unsigned int i = 0; i < bpmem.genMode.numtevstages + 1u; ++i)
-			if (bpmem.tevind[i].IsActive() && bpmem.tevind[i].bt < bpmem.genMode.numindstages)
-				usedtextures |= 1 << bpmem.tevindref.getTexMap(bpmem.tevind[i].bt);
-
-	for (unsigned int i = 0; i < 8; i++)
-	{
-		if (usedtextures & (1 << i))
-		{
-			g_renderer->SetSamplerState(i & 3, i >> 2);
-			const FourTexUnits &tex = bpmem.tex[i >> 2];
-			const TextureCache::TCacheEntryBase* tentry = TextureCache::Load(i,
-				(tex.texImage3[i&3].image_base/* & 0x1FFFFF*/) << 5,
-				tex.texImage0[i&3].width + 1, tex.texImage0[i&3].height + 1,
-				tex.texImage0[i&3].format, tex.texTlut[i&3].tmem_offset<<9,
-				tex.texTlut[i&3].tlut_format,
-				((tex.texMode0[i&3].min_filter & 3) != 0),
-				(tex.texMode1[i&3].max_lod + 0xf) / 0x10,
-				(tex.texImage1[i&3].image_type != 0));
-
-			if (tentry)
-			{
-				// 0s are probably for no manual wrapping needed.
-				PixelShaderManager::SetTexDims(i, tentry->native_width, tentry->native_height, 0, 0);
-			}
-			else
-				ERROR_LOG(VIDEO, "error loading texture");
-		}
-	}
+	FlushTextures();
 
 	// set global constants
 	VertexShaderManager::SetConstants();
