@@ -208,7 +208,7 @@ void Jit64::fselx(UGeckoInstruction inst)
 		FallBackToInterpreter(inst);
 		return;
 	}
-	
+
 	int d = inst.FD;
 	int a = inst.FA;
 	int b = inst.FB;
