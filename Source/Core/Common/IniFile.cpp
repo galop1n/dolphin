@@ -346,10 +346,7 @@ bool IniFile::Load(const std::string& filename, bool keep_current_data)
 
 		if (!std::getline(in, line))
 		{
-			if (in.eof())
-				return true;
-			else
-				return false;
+			return in.eof();
 		}
 
 #ifndef _WIN32
