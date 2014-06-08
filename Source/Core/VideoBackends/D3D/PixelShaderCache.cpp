@@ -38,6 +38,7 @@ ID3D11PixelShader* s_ClearProgram = nullptr;
 ID3D11PixelShader* s_rgba6_to_rgb8[2] = {nullptr};
 ID3D11PixelShader* s_rgb8_to_rgba6[2] = {nullptr};
 ID3D11Buffer* pscbuf = nullptr;
+ID3D11Buffer* pscbuf_alt = nullptr;
 
 const char clear_program_code[] = {
 	"void main(\n"
@@ -336,18 +337,16 @@ ID3D11PixelShader* PixelShaderCache::GetClearProgram()
 
 ID3D11Buffer* &PixelShaderCache::GetConstantBuffer()
 {
+	auto &buf = g_ActiveConfig.bEnablePixelLighting ? pscbuf : pscbuf_alt;
 	// TODO: divide the global variables of the generated shaders into about 5 constant buffers to speed this up
 	if (PixelShaderManager::dirty)
 	{
-		D3D11_MAPPED_SUBRESOURCE map;
-		D3D::context->Map(pscbuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &map);
-		memcpy(map.pData, &PixelShaderManager::constants, sizeof(PixelShaderConstants));
-		D3D::context->Unmap(pscbuf, 0);
 		PixelShaderManager::dirty = false;
-
-		ADDSTAT(stats.thisFrame.bytesUniformStreamed, sizeof(PixelShaderConstants));
+		int sz = g_ActiveConfig.bEnablePixelLighting ? sizeof(PixelShaderConstants) : sizeof(PixelShaderNoLightConstants);
+		D3D::context->UpdateSubresource(buf,0,nullptr, &PixelShaderManager::constants, sz,0);
+		ADDSTAT(stats.thisFrame.bytesUniformStreamed, sz);
 	}
-	return pscbuf;
+	return buf;
 }
 
 // this class will load the precompiled shaders into our cache
@@ -362,11 +361,17 @@ public:
 
 void PixelShaderCache::Init()
 {
-	unsigned int cbsize = ((sizeof(PixelShaderConstants))&(~0xf))+0x10; // must be a multiple of 16
-	D3D11_BUFFER_DESC cbdesc = CD3D11_BUFFER_DESC(cbsize, D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
+	unsigned int cbsize = (sizeof(PixelShaderConstants)+0xF) & ~0xF; // must be a multiple of 16
+	D3D11_BUFFER_DESC cbdesc = CD3D11_BUFFER_DESC(cbsize, D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DEFAULT, 0);
 	D3D::device->CreateBuffer(&cbdesc, nullptr, &pscbuf);
 	CHECK(pscbuf!=nullptr, "Create pixel shader constant buffer");
 	D3D::SetDebugObjectName((ID3D11DeviceChild*)pscbuf, "pixel shader constant buffer used to emulate the GX pipeline");
+
+	cbdesc.ByteWidth = (sizeof(PixelShaderNoLightConstants)+0xF) & ~0xF; // must be a multiple of 16
+	D3D::device->CreateBuffer(&cbdesc, nullptr, &pscbuf_alt);
+	CHECK(pscbuf_alt!=nullptr, "Create pixel shader constant buffer");
+	D3D::SetDebugObjectName((ID3D11DeviceChild*)pscbuf_alt, "pixel shader constant buffer used to emulate the GX pipeline");
+
 
 	// used when drawing clear quads
 	s_ClearProgram = D3D::CompileAndCreatePixelShader(clear_program_code, sizeof(clear_program_code));
@@ -432,6 +437,7 @@ void PixelShaderCache::InvalidateMSAAShaders()
 void PixelShaderCache::Shutdown()
 {
 	SAFE_RELEASE(pscbuf);
+	SAFE_RELEASE(pscbuf_alt);
 
 	SAFE_RELEASE(s_ClearProgram);
 	for (int i = 0; i < 2; ++i)
@@ -521,6 +527,7 @@ bool PixelShaderCache::InsertByteCode(const PixelShaderUid &uid, const void* byt
 	// Make an entry in the table
 	PSCacheEntry newentry;
 	newentry.shader = shader;
+	newentry.mask_ = D3D::ReflectTextureMask(bytecode, bytecodelen);
 	PixelShaders[uid] = newentry;
 	last_entry = &PixelShaders[uid];
 

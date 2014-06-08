@@ -40,8 +40,8 @@ namespace AudioCommon
 			soundStream = new OpenALStream(mixer);
 		else if (backend == BACKEND_NULLSOUND   && NullSound::isValid())
 			soundStream = new NullSound(mixer);
-		else if (backend == BACKEND_DIRECTSOUND && DSound::isValid())
-			soundStream = new DSound(mixer, hWnd);
+		//else if (backend == BACKEND_DIRECTSOUND && DSound::isValid())
+		//	soundStream = new DSound(mixer, hWnd);
 		else if (backend == BACKEND_XAUDIO2)
 		{
 			if (XAudio2::isValid())

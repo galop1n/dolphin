@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include "VideoBackends/D3D/LineGeometryShader.h"
-#include "VideoBackends/D3D/PointGeometryShader.h"
+#include "VideoBackends/D3D/LineAndPointGeometryShader.h"
 #include "VideoCommon/VertexManagerBase.h"
 
 namespace DX11
@@ -27,23 +26,24 @@ protected:
 
 private:
 
-	void PrepareDrawBuffers();
+	void PrepareDrawBuffers(u32 stride);
 	void Draw(u32 stride);
 	// temp
 	void vFlush(bool useDstAlpha) override;
 
-	u32 m_vertex_buffer_cursor;
-	u32 m_vertex_draw_offset;
-	u32 m_index_buffer_cursor;
-	u32 m_index_draw_offset;
-	u32 m_current_vertex_buffer;
-	u32 m_current_index_buffer;
-	typedef ID3D11Buffer* PID3D11Buffer;
-	PID3D11Buffer* m_index_buffers;
-	PID3D11Buffer* m_vertex_buffers;
+	
+	u32 m_vertexDrawOffset{};
+	u32 m_indexDrawOffset{};
+	
+	using PID3D11Buffer = ID3D11Buffer*;
 
-	LineGeometryShader m_lineShader;
-	PointGeometryShader m_pointShader;
+	static const UINT MAX_BUFFER_COUNT = 1;
+
+	u32 m_bufferCursor;
+	u32 m_currentBuffer;
+	std::array<PID3D11Buffer,MAX_BUFFER_COUNT> m_buffers;
+
+	LineAndPointGeometryShader m_lineAndPointShader;
 
 	std::vector<u8> LocalVBuffer;
 	std::vector<u16> LocalIBuffer;

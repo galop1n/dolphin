@@ -231,13 +231,18 @@ static inline void GeneratePixelShader(T& out, DSTALPHA_MODE dstAlphaMode, API_T
 		"\tint4 " I_INDTEXMTX"[6];\n"
 		"\tint4 " I_FOGCOLOR";\n"
 		"\tint4 " I_FOGI";\n"
-		"\tfloat4 " I_FOGF"[2];\n"
-
+		"\tfloat4 " I_FOGF"[2];\n" );
+	if (g_ActiveConfig.bEnablePixelLighting) 
+	{
+		out.Write(
 		// For pixel lighting - TODO: Should only be defined when per pixel lighting is enabled!
 		"\tint4 " I_PLIGHT_COLORS"[8];\n"
 		"\tfloat4 " I_PLIGHTS"[32];\n"
 		"\tint4 " I_PMATERIALS"[4];\n"
 		"};\n");
+	} else {
+		out.Write( "};\n" );
+	}
 
 	const bool forced_early_z = g_ActiveConfig.backend_info.bSupportsEarlyZ && bpmem.UseEarlyDepthTest() && (g_ActiveConfig.bFastDepthCalc || bpmem.alpha_test.TestResult() == AlphaTest::UNDETERMINED);
 	const bool per_pixel_depth = (bpmem.ztex2.op != ZTEXTURE_DISABLE && bpmem.UseLateDepthTest()) || (!g_ActiveConfig.bFastDepthCalc && bpmem.zmode.testenable && !forced_early_z);

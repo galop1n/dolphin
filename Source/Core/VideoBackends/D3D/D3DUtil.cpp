@@ -350,6 +350,7 @@ int CD3DFont::DrawTextScaled(float x, float y, float size, float spacing, u32 dw
 
 	D3D::context->PSSetShader(m_pshader, nullptr, 0);
 	D3D::context->VSSetShader(m_vshader, nullptr, 0);
+	D3D::context->GSSetShader(nullptr, nullptr, 0);
 
 	D3D::context->IASetInputLayout(m_InputLayout);
 	D3D::context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -549,6 +550,7 @@ void drawShadedTexQuad(ID3D11ShaderResourceView* texture,
 	D3D::context->PSSetShader(PShader, nullptr, 0);
 	D3D::context->PSSetShaderResources(0, 1, &texture);
 	D3D::context->VSSetShader(Vshader, nullptr, 0);
+	D3D::context->GSSetShader(nullptr, nullptr, 0);
 	D3D::stateman->Apply();
 	D3D::context->Draw(4, stq_offset);
 
@@ -606,6 +608,7 @@ void drawShadedTexSubQuad(ID3D11ShaderResourceView* texture,
 	context->PSSetShaderResources(0, 1, &texture);
 	context->PSSetShader(PShader, nullptr, 0);
 	context->VSSetShader(Vshader, nullptr, 0);
+	context->GSSetShader(nullptr, nullptr, 0);
 	stateman->Apply();
 	context->Draw(4, stsq_offset);
 
@@ -641,6 +644,7 @@ void drawColorQuad(u32 Color, float x1, float y1, float x2, float y2)
 
 	context->VSSetShader(VertexShaderCache::GetClearVertexShader(), nullptr, 0);
 	context->PSSetShader(PixelShaderCache::GetClearProgram(), nullptr, 0);
+	context->GSSetShader(nullptr, nullptr, 0);
 	context->IASetInputLayout(VertexShaderCache::GetClearInputLayout());
 
 	UINT stride = sizeof(ColVertex);
@@ -671,6 +675,7 @@ void drawClearQuad(u32 Color, float z, ID3D11PixelShader* PShader, ID3D11VertexS
 	}
 	context->VSSetShader(Vshader, nullptr, 0);
 	context->PSSetShader(PShader, nullptr, 0);
+	context->GSSetShader(nullptr, nullptr, 0);
 	context->IASetInputLayout(layout);
 
 	UINT stride = sizeof(ClearVertex);

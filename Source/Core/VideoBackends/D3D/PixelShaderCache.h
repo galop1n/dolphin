@@ -24,6 +24,7 @@ public:
 	static bool InsertByteCode(const PixelShaderUid &uid, const void* bytecode, unsigned int bytecodelen);
 
 	static ID3D11PixelShader* GetActiveShader() { return last_entry->shader; }
+	static u32                GetActiveMask() { return last_entry->mask_; }
 	static ID3D11Buffer* &GetConstantBuffer();
 
 	static ID3D11PixelShader* GetColorMatrixProgram(bool multisampled);
@@ -39,6 +40,7 @@ private:
 	struct PSCacheEntry
 	{
 		ID3D11PixelShader* shader;
+		u32 mask_ {};
 
 		std::string code;
 

@@ -1084,6 +1084,7 @@ size_t PSTextureEncoder::Encode(u8* dst, unsigned int dstFormat,
 #endif
 	{
 		D3D::context->VSSetShader(m_vShader, nullptr, 0);
+		D3D::context->GSSetShader(nullptr, nullptr, 0);
 
 		D3D::stateman->PushBlendState(m_efbEncodeBlendState);
 		D3D::stateman->PushDepthState(m_efbEncodeDepthState);
@@ -1159,6 +1160,7 @@ size_t PSTextureEncoder::Encode(u8* dst, unsigned int dstFormat,
 
 		D3D::context->PSSetShader(nullptr, nullptr, 0);
 		D3D::context->VSSetShader(nullptr, nullptr, 0);
+		D3D::context->GSSetShader(nullptr, nullptr, 0);
 
 		// Transfer staging buffer to GameCube/Wii RAM
 

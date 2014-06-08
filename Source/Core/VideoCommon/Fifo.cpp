@@ -142,9 +142,17 @@ void RunGpuLoop()
 	SCPFifoStruct &fifo = CommandProcessor::fifo;
 	u32 cyclesExecuted = 0;
 
+	int lastFrameCount{-1};
+	extern int frameCount;
 	while (GpuRunningState)
 	{
-		g_video_backend->PeekMessages();
+		//TODO: this is useful when their is a lot of sync between cpu/gpu and when
+		//      the cpu is slower than video, but the global lastFrameCount is more a
+		//      hot fix than a real solution.
+		if(frameCount!=lastFrameCount){
+			g_video_backend->PeekMessages();
+			lastFrameCount=frameCount;
+		}
 
 		VideoFifo_CheckAsyncRequest();
 
