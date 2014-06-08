@@ -10,7 +10,6 @@
 
 static const u64 GC_ALIGNED16(psSignBits2[2]) = {0x8000000000000000ULL, 0x8000000000000000ULL};
 static const u64 GC_ALIGNED16(psAbsMask2[2])  = {0x7FFFFFFFFFFFFFFFULL, 0x7FFFFFFFFFFFFFFFULL};
-static const double one_const = 1.0f;
 
 void Jit64::fp_tri_op(int d, int a, int b, bool reversible, bool single, void (XEmitter::*op)(Gen::X64Reg, Gen::OpArg))
 {
@@ -241,10 +240,21 @@ void Jit64::fmrx(UGeckoInstruction inst)
 
 	int d = inst.FD;
 	int b = inst.FB;
+
+	if (d == b)
+		return;
+
 	fpr.Lock(b, d);
-	fpr.BindToRegister(d, true, true);
-	MOVSD(XMM0, fpr.R(b));
-	MOVSD(fpr.R(d), XMM0);
+
+	// We don't need to load d, but if it is loaded, we need to mark it as dirty.
+	if (fpr.IsBound(d))
+		fpr.BindToRegister(d);
+
+	// b needs to be in a register because "MOVSD reg, mem" sets the upper bits (64+) to zero and we don't want that.
+	fpr.BindToRegister(b, true, false);
+
+	MOVSD(fpr.R(d), fpr.RX(b));
+
 	fpr.UnlockAll();
 }
 
