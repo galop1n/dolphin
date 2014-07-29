@@ -42,6 +42,9 @@ enum EFBScale
 	SCALE_2_5X,
 	SCALE_3X,
 	SCALE_4X,
+	SCALE_5X,
+	SCALE_6X,
+	SCALE_7X,
 };
 
 class IniFile;
@@ -108,6 +111,7 @@ struct VideoConfig final
 	bool bEFBAccessEnable;
 	bool bPerfQueriesEnable;
 
+	int itexDec;
 	bool bEFBCopyEnable;
 	bool bEFBCopyCacheEnable;
 	bool bEFBEmulateFormatChanges;
@@ -150,6 +154,8 @@ struct VideoConfig final
 		bool bSupportsOversizedViewports;
 		bool bSupportsEarlyZ; // needed by PixelShaderGen, so must stay in VideoCommon
 		bool bSupportsBindingLayout; // Needed by ShaderGen, so must stay in VideoCommon
+		bool bSupportsLogicOp;
+		bool bSupportsShaderModel5;
 	} backend_info;
 
 	// Utility

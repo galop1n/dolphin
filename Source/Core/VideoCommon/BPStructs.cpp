@@ -91,7 +91,7 @@ static void BPWritten(const BPCmd& bp)
 		         (u32)bpmem.genMode.numtexgens, (u32)bpmem.genMode.numcolchans,
 		         (u32)bpmem.genMode.multisampling, (u32)bpmem.genMode.numtevstages+1, (u32)bpmem.genMode.cullmode,
 		         (u32)bpmem.genMode.numindstages, (u32)bpmem.genMode.zfreeze);
-
+		SetDepthMode();
 		// Only call SetGenerationMode when cull mode changes.
 		if (bp.changes & 0xC000)
 			SetGenerationMode();
@@ -566,9 +566,11 @@ static void BPWritten(const BPCmd& bp)
 			// don't compare with changes!
 			int num = (bp.address >> 1) & 0x3;
 			if ((bp.address & 1) == 0)
-				PixelShaderManager::SetColorChanged(bpmem.tevregs[num].type_ra, num);
+				PixelShaderManager::SetColorChangedRA(bpmem.tevregs[num].type_ra, num);
+				//PixelShaderManager::SetColorChanged(bpmem.tevregs[num].type_ra, num);
 			else
-				PixelShaderManager::SetColorChanged(bpmem.tevregs[num].type_bg, num);
+				PixelShaderManager::SetColorChangedBG(bpmem.tevregs[num].type_bg, num);
+				//PixelShaderManager::SetColorChanged(bpmem.tevregs[num].type_bg, num);
 		}
 		return;
 	default:

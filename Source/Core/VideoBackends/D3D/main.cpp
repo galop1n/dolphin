@@ -91,6 +91,8 @@ void InitBackendInfo()
 	g_Config.backend_info.bSupportsPrimitiveRestart = false; 
 	g_Config.backend_info.bSupportsOversizedViewports = false;
 
+	g_Config.backend_info.bSupportsLogicOp = false;
+
 	IDXGIFactory* factory;
 	IDXGIAdapter* ad;
 	hr = DX11::PCreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&factory);
@@ -123,6 +125,7 @@ void InitBackendInfo()
 
 			// Requires the earlydepthstencil attribute (only available in shader model 5)
 			g_Config.backend_info.bSupportsEarlyZ = (DX11::D3D::GetFeatureLevel(ad) == D3D_FEATURE_LEVEL_11_0);
+			g_Config.backend_info.bSupportsShaderModel5 = (DX11::D3D::GetFeatureLevel(ad) >= D3D_FEATURE_LEVEL_11_0);
 		}
 
 		g_Config.backend_info.Adapters.push_back(UTF16ToUTF8(desc.Description));

@@ -33,6 +33,7 @@ static Matrix33 s_viewRotationMatrix;
 static Matrix33 s_viewInvRotationMatrix;
 static float s_fViewTranslationVector[3];
 static float s_fViewRotation[2];
+static bool s_viewportNonStandard{};
 
 VertexShaderConstants VertexShaderManager::constants;
 bool VertexShaderManager::dirty;
@@ -163,6 +164,9 @@ static void ViewportCorrectionMatrix(Matrix44& result)
 	result.data[4*1+3] = (-intendedHt + 2.f * (Y - intendedY)) / Ht + 1.f;
 }
 
+bool VertexShaderManager::ViewportNonStandard() {
+	return s_viewportNonStandard;
+}
 void VertexShaderManager::Init()
 {
 	Dirty();
@@ -364,6 +368,14 @@ void VertexShaderManager::SetConstants()
 		constants.depthparams[0] = xfmem.viewport.farZ / 16777216.0f;
 		constants.depthparams[1] = xfmem.viewport.zRange / 16777216.0f;
 
+		if (g_ActiveConfig.backend_info.APIType == API_D3D) {
+			float near_ = (xfmem.viewport.farZ-xfmem.viewport.zRange) / 16777216.0f;
+			float far_ = (xfmem.viewport.farZ) / 16777216.0f;
+			s_viewportNonStandard = !(near_ >=0.f && far_ <= 1.f && near_ <1.f && far_ > 0.f);
+			constants.depthparams[0] -= 1.f;
+			//NOTICE_LOG(VIDEO,"N:%f F:%f",near_,far_);
+		}
+
 		// The console GPU places the pixel center at 7/12 unless antialiasing
 		// is enabled, while D3D and OpenGL place it at 0.5. See the comment
 		// in VertexShaderGen.cpp for details.
@@ -395,7 +407,6 @@ void VertexShaderManager::SetConstants()
 		switch (xfmem.projection.type)
 		{
 		case GX_PERSPECTIVE:
-
 			g_fProjectionMatrix[0] = rawProjection[0] * g_ActiveConfig.fAspectRatioHackW;
 			g_fProjectionMatrix[1] = 0.0f;
 			g_fProjectionMatrix[2] = rawProjection[1];
@@ -409,7 +420,6 @@ void VertexShaderManager::SetConstants()
 			g_fProjectionMatrix[8] = 0.0f;
 			g_fProjectionMatrix[9] = 0.0f;
 			g_fProjectionMatrix[10] = rawProjection[4];
-
 			g_fProjectionMatrix[11] = rawProjection[5];
 
 			g_fProjectionMatrix[12] = 0.0f;
@@ -439,7 +449,6 @@ void VertexShaderManager::SetConstants()
 			break;
 
 		case GX_ORTHOGRAPHIC:
-
 			g_fProjectionMatrix[0] = rawProjection[0];
 			g_fProjectionMatrix[1] = 0.0f;
 			g_fProjectionMatrix[2] = 0.0f;

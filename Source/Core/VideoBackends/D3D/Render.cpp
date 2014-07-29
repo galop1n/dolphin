@@ -59,9 +59,9 @@ static ID3D11Texture2D* s_screenshot_texture = nullptr;
 struct
 {
 	D3D11_SAMPLER_DESC sampdc[8];
-	D3D11_BLEND_DESC blenddc;
+	D3D::PackedD3DBlendDesc blenddc;
 	D3D11_DEPTH_STENCIL_DESC depthdc;
-	D3D11_RASTERIZER_DESC rastdc;
+	D3D::PackedD3DRasterisationDesc rastdc;
 } gx_state;
 
 
@@ -219,7 +219,7 @@ Renderer::Renderer()
 	memset(&gx_state.depthdc, 0, sizeof(gx_state.depthdc));
 	gx_state.depthdc.DepthEnable      = TRUE;
 	gx_state.depthdc.DepthWriteMask   = D3D11_DEPTH_WRITE_MASK_ALL;
-	gx_state.depthdc.DepthFunc        = D3D11_COMPARISON_LESS;
+	gx_state.depthdc.DepthFunc        = D3D11_COMPARISON_GREATER;
 	gx_state.depthdc.StencilEnable    = FALSE;
 	gx_state.depthdc.StencilReadMask  = D3D11_DEFAULT_STENCIL_READ_MASK;
 	gx_state.depthdc.StencilWriteMask = D3D11_DEFAULT_STENCIL_WRITE_MASK;
@@ -325,6 +325,22 @@ void Renderer::SetColorMask()
 	gx_state.blenddc.RenderTarget[0].RenderTargetWriteMask = color_mask;
 }
 
+// EFB cache related
+static const u32 EFB_CACHE_RECT_SIZE = 64; // Cache 64x64 blocks.
+static const u32 EFB_CACHE_WIDTH = (EFB_WIDTH + EFB_CACHE_RECT_SIZE - 1) / EFB_CACHE_RECT_SIZE; // round up
+static const u32 EFB_CACHE_HEIGHT = (EFB_HEIGHT + EFB_CACHE_RECT_SIZE - 1) / EFB_CACHE_RECT_SIZE;
+
+union ColorAndDepth{
+	BitField< 0,4,u8> color_;
+	BitField< 4,4,u8> depth_;
+	u8 raw_;
+};
+static_assert(sizeof(ColorAndDepth)==1,"ColorAndDepth must be 8 bits");
+std::array<ColorAndDepth, EFB_CACHE_WIDTH * EFB_CACHE_HEIGHT> s_efbCacheValid{};
+
+static std::vector<float> s_depthEfbCache(EFB_CACHE_WIDTH * EFB_CACHE_HEIGHT); // 2 for PEEK_Z and PEEK_COLOR
+static std::vector<u32> s_colorEfbCache(EFB_CACHE_WIDTH * EFB_CACHE_HEIGHT); // 2 for PEEK_Z and PEEK_COLOR
+
 // This function allows the CPU to directly access the EFB.
 // There are EFB peeks (which will read the color or depth of a pixel)
 // and EFB pokes (which will change the color or depth of a pixel).
@@ -406,10 +422,13 @@ u32 Renderer::AccessEFB(EFBAccessType type, u32 x, u32 y, u32 poke_data)
 
 		RestoreAPIState(); // restore game state
 
+		float val = 0.f;
 		// read the data from system memory
-		D3D::context->Map(read_tex, 0, D3D11_MAP_READ, 0, &map);
+		if ( S_OK == D3D::context->Map(read_tex, 0, D3D11_MAP_READ, 0, &map) ) {
+			val = 1.f-*(float*)map.pData; // depth buffer logic is inverted in d3d
+			D3D::context->Unmap(read_tex, 0);
+		} 
 
-		float val = *(float*)map.pData;
 		u32 ret = 0;
 		if (bpmem.zcontrol.pixel_format == PEControl::RGB565_Z16)
 		{
@@ -420,7 +439,7 @@ u32 Renderer::AccessEFB(EFBAccessType type, u32 x, u32 y, u32 poke_data)
 		{
 			ret = ((u32)(val * 0xffffff));
 		}
-		D3D::context->Unmap(read_tex, 0);
+
 
 		// TODO: in RE0 this value is often off by one in Video_DX9 (where this code is derived from), which causes lighting to disappear
 		return ret;
@@ -432,12 +451,12 @@ u32 Renderer::AccessEFB(EFBAccessType type, u32 x, u32 y, u32 poke_data)
 		D3D11_BOX box = CD3D11_BOX(RectToLock.left, RectToLock.top, 0, RectToLock.right, RectToLock.bottom, 1);
 		D3D::context->CopySubresourceRegion(read_tex, 0, 0, 0, 0, FramebufferManager::GetEFBColorTexture()->GetTex(), 0, &box);
 
-		// read the data from system memory
-		D3D::context->Map(read_tex, 0, D3D11_MAP_READ, 0, &map);
 		u32 ret = 0;
-		if (map.pData)
+		// read the data from system memory
+		if (S_OK == D3D::context->Map(read_tex, 0, D3D11_MAP_READ, 0, &map) ) {
 			ret = *(u32*)map.pData;
-		D3D::context->Unmap(read_tex, 0);
+			D3D::context->Unmap(read_tex, 0);
+		}
 
 		// check what to do with the alpha channel (GX_PokeAlphaRead)
 		PixelEngine::UPEAlphaReadReg alpha_read_mode = PixelEngine::GetAlphaReadMode();
@@ -516,10 +535,29 @@ void Renderer::SetViewport()
 	Wd = (X + Wd <= GetTargetWidth()) ? Wd : (GetTargetWidth() - X);
 	Ht = (Y + Ht <= GetTargetHeight()) ? Ht : (GetTargetHeight() - Y);
 
+	auto zfar = xfmem.viewport.farZ;
+	auto zRange = xfmem.viewport.zRange;
+
+	if (zRange<0)
+		gx_state.rastdc.FrontCounterClockwise = TRUE;
+	else
+		gx_state.rastdc.FrontCounterClockwise = FALSE;
+
+	D3D11_VIEWPORT vp;
 	// Some games set invalid values for z-min and z-max so fix them to the max and min allowed and let the shaders do this work
-	D3D11_VIEWPORT vp = CD3D11_VIEWPORT(X, Y, Wd, Ht,
-										0.f,  // (xfmem.viewport.farZ - xfmem.viewport.zRange) / 16777216.0f;
-										1.f); //  xfmem.viewport.farZ / 16777216.0f;
+	// To emulate the same depth buffer accurancy, we revert the depth test and viewport need to be 1-far..1-near
+	 vp = CD3D11_VIEWPORT(X, Y, Wd, Ht,
+										 1.f - zfar / 16777216.0f,
+										 1.f - (zfar - zRange) / 16777216.0f
+										 );
+	//TODO: Remove the clipdistance and viewport transform from vertex shader when the viewport is in 0..1 range
+	//TODO: when the range overflow, clamp to 0..1 and use scale and bias at the end of the vertex shader, clip planes should not be useful
+	//TODO: Some games use an inverted near = 0 and far = -1, check what has to be done in that case.
+	if (VertexShaderManager::ViewportNonStandard()) {
+		vp.MaxDepth = 1.f;
+		vp.MinDepth = 0.f;
+	 }
+
 	D3D::context->RSSetViewports(1, &vp);
 }
 
@@ -544,7 +582,7 @@ void Renderer::ClearScreen(const EFBRectangle& rc, bool colorEnable, bool alphaE
 
 	// Color is passed in bgra mode so we need to convert it to rgba
 	u32 rgbaColor = (color & 0xFF00FF00) | ((color >> 16) & 0xFF) | ((color << 16) & 0xFF0000);
-	D3D::drawClearQuad(rgbaColor, (z & 0xFFFFFF) / float(0xFFFFFF), PixelShaderCache::GetClearProgram(), VertexShaderCache::GetClearVertexShader(), VertexShaderCache::GetClearInputLayout());
+	D3D::drawClearQuad(rgbaColor, (0xFFFFFF-(z & 0xFFFFFF)) / float(0xFFFFFF), PixelShaderCache::GetClearProgram(), VertexShaderCache::GetClearVertexShader(), VertexShaderCache::GetClearInputLayout());
 
 	D3D::stateman->PopDepthState();
 	D3D::stateman->PopBlendState();
@@ -731,6 +769,7 @@ void formatBufferDump(const u8* in, u8* out, int w, int h, int p)
 // This function has the final picture. We adjust the aspect ratio here.
 void Renderer::SwapImpl(u32 xfbAddr, u32 fbWidth, u32 fbHeight,const EFBRectangle& rc,float Gamma)
 {
+	//NOTICE_LOG(VIDEO,"PRESENT");
 	if (g_bSkipCurrentFrame || (!XFBWrited && !g_ActiveConfig.RealXFBEnabled()) || !fbWidth || !fbHeight)
 	{
 		if (g_ActiveConfig.bDumpFrames && !frame_data.empty())
@@ -806,7 +845,7 @@ void Renderer::SwapImpl(u32 xfbAddr, u32 fbWidth, u32 fbHeight,const EFBRectangl
 			if (g_ActiveConfig.bUseRealXFB)
 			{
 				drawRc.top = 1;
-				drawRc.bottom = -1;
+				drawRc.bottom = -1; 
 				drawRc.left = -1;
 				drawRc.right = 1;
 			}
@@ -1053,7 +1092,7 @@ void Renderer::ApplyState(bool bUseDstAlpha) {
 	gx_state.rastdc.FillMode = (g_ActiveConfig.bWireFrame) ? D3D11_FILL_WIREFRAME : D3D11_FILL_SOLID;
 	D3D::stateman->PushRasterizerState( D3D::GetRasterizerState(gx_state.rastdc, "rasterizer state used to emulate the GX pipeline") );
 
-	auto mask = u32(-1);//PixelShaderCache::GetActiveMask();
+	auto mask = PixelShaderCache::GetActiveMask();
 	for (unsigned int stage = 0; stage < 8; stage++) {
 		if ( (1u<<stage)&mask ) {
 			if (g_ActiveConfig.iMaxAnisotropy > 0 )
@@ -1087,7 +1126,7 @@ void Renderer::RestoreState() {
 
 void Renderer::ApplyCullDisable()
 {
-	D3D11_RASTERIZER_DESC rastDesc = gx_state.rastdc;
+	auto rastDesc = gx_state.rastdc;
 	rastDesc.CullMode = D3D11_CULL_NONE;
 	D3D::stateman->PushRasterizerState(D3D::GetRasterizerState(rastDesc));
 	D3D::stateman->Apply();
@@ -1113,17 +1152,23 @@ void Renderer::SetGenerationMode()
 	gx_state.rastdc.CullMode = d3dCullModes[bpmem.genMode.cullmode];
 }
 
+int lastFrameCount = 0;
+int bibias = 0;
 void Renderer::SetDepthMode()
 {
+	if( frameCount != lastFrameCount ){
+		lastFrameCount = frameCount;
+		bibias = 0;
+	}
 	const D3D11_COMPARISON_FUNC d3dCmpFuncs[8] =
 	{
 		D3D11_COMPARISON_NEVER,
-		D3D11_COMPARISON_LESS,
-		D3D11_COMPARISON_EQUAL,
-		D3D11_COMPARISON_LESS_EQUAL,
 		D3D11_COMPARISON_GREATER,
-		D3D11_COMPARISON_NOT_EQUAL,
+		D3D11_COMPARISON_EQUAL,
 		D3D11_COMPARISON_GREATER_EQUAL,
+		D3D11_COMPARISON_LESS,
+		D3D11_COMPARISON_NOT_EQUAL,
+		D3D11_COMPARISON_LESS_EQUAL,
 		D3D11_COMPARISON_ALWAYS
 	};
 
@@ -1132,13 +1177,25 @@ void Renderer::SetDepthMode()
 		gx_state.depthdc.DepthEnable = TRUE;
 		gx_state.depthdc.DepthWriteMask = bpmem.zmode.updateenable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
 		gx_state.depthdc.DepthFunc = d3dCmpFuncs[bpmem.zmode.func];
+		gx_state.rastdc.DepthClipEnable = FALSE;//xfmem.clipDisable == 0;
 	}
 	else
 	{
 		// if the test is disabled write is disabled too
 		gx_state.depthdc.DepthEnable = FALSE;
 		gx_state.depthdc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+		gx_state.rastdc.DepthClipEnable = FALSE;
 	}
+	if (bpmem.genMode.zfreeze != 0) {
+		  bibias -=2;;
+			gx_state.rastdc.DepthBias = -2;
+			gx_state.rastdc.SlopeScaledDepthBias = -2;
+			gx_state.depthdc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	} else {
+		  gx_state.rastdc.DepthBias = 0;
+			gx_state.rastdc.SlopeScaledDepthBias = 0;
+	}
+	
 }
 
 void Renderer::SetLogicOpMode()
@@ -1220,15 +1277,41 @@ void Renderer::SetLogicOpMode()
 		D3D11_BLEND_ONE//15
 	};
 
+	const D3D11_LOGIC_OP d3dLogicOp[16] =
+	{
+		D3D11_LOGIC_OP_CLEAR,
+		D3D11_LOGIC_OP_AND,
+		D3D11_LOGIC_OP_AND_REVERSE,
+		D3D11_LOGIC_OP_COPY,
+		D3D11_LOGIC_OP_AND_INVERTED,
+		D3D11_LOGIC_OP_NOOP,
+		D3D11_LOGIC_OP_XOR,
+		D3D11_LOGIC_OP_OR,
+		D3D11_LOGIC_OP_NOR,
+		D3D11_LOGIC_OP_EQUIV,
+		D3D11_LOGIC_OP_INVERT,
+		D3D11_LOGIC_OP_OR_REVERSE,
+		D3D11_LOGIC_OP_COPY_INVERTED,
+		D3D11_LOGIC_OP_OR_INVERTED,
+		D3D11_LOGIC_OP_NAND,
+		D3D11_LOGIC_OP_SET
+	};
+
 	if (bpmem.blendmode.logicopenable)
 	{
+		
 		gx_state.blenddc.RenderTarget[0].BlendEnable = true;
 		SetBlendOp(d3dLogicOps[bpmem.blendmode.logicmode]);
 		SetSrcBlend(d3dLogicOpSrcFactors[bpmem.blendmode.logicmode]);
 		SetDestBlend(d3dLogicOpDestFactors[bpmem.blendmode.logicmode]);
+		
+		//g_Config.backend_info.bSupportsLogicOp
+		//gx_state.blenddc.LogicOpEnable = TRUE;
+		//gx_state.blenddc.LogicOp = d3dLogicOp[bpmem.blendmode.logicmode];
 	}
 	else
 	{
+		gx_state.blenddc.LogicOpEnable = FALSE;
 		SetBlendMode(true);
 	}
 }

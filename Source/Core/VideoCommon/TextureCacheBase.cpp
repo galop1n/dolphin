@@ -2,8 +2,11 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+
 #include <algorithm>
 
+#include <unordered_set>
+#include <tuple>
 #include "Common/FileUtil.h"
 #include "Common/MemoryUtil.h"
 
@@ -25,10 +28,15 @@ enum
 	TEXTURE_KILL_THRESHOLD = 200,
 };
 
+std::unordered_set<u64> done;
+
 TextureCache *g_texture_cache;
 
 GC_ALIGNED16(u8 *TextureCache::temp) = nullptr;
 unsigned int TextureCache::temp_size;
+
+GC_ALIGNED16(u8 const* TextureCache::src_temp) = nullptr;
+unsigned int TextureCache::src_temp_size;
 
 TextureCache::TexCache TextureCache::textures;
 
@@ -54,6 +62,20 @@ TextureCache::TextureCache()
 	SetHash64Function(g_ActiveConfig.bHiresTextures || g_ActiveConfig.bDumpTextures);
 
 	invalidate_texture_cache_requested = false;
+
+	std::string szDir = File::GetUserPath(D_DUMPTEXTURES_IDX) + SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID;
+
+	// make sure that the directory exists
+	if (!File::Exists(szDir) || !File::IsDirectory(szDir))
+		File::CreateDir(szDir);
+
+	szDir = File::GetUserPath(D_DUMPTEXTURES_IDX) + SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID + "/mips";
+
+	// make sure that the directory exists
+	if (!File::Exists(szDir) || !File::IsDirectory(szDir))
+		File::CreateDir(szDir);
+
+
 }
 
 void TextureCache::RequestInvalidateTextureCache()
@@ -72,6 +94,7 @@ void TextureCache::Invalidate()
 
 TextureCache::~TextureCache()
 {
+	done.clear();
 	Invalidate();
 	FreeAlignedMemory(temp);
 	temp = nullptr;
@@ -285,18 +308,20 @@ PC_TexFormat TextureCache::LoadCustomTexture(u64 tex_hash, int texformat, unsign
 	return ret;
 }
 
+
 void TextureCache::DumpTexture(TCacheEntryBase* entry, unsigned int level)
 {
+	if( done.find( (entry->hash & 0x00000000FFFFFFFFLL)| (u64(level)<<32ull) | (u64(entry->format & 0xFFFF)<<48ull) ) 
+			!= done.end() ) {
+		return;
+	}
+	done.insert( (entry->hash & 0x00000000FFFFFFFFLL)| (u64(level)<<32ull) | (u64(entry->format & 0xFFFF)<<48ull) );
 	std::string filename;
 	std::string szDir = File::GetUserPath(D_DUMPTEXTURES_IDX) +
-		SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID;
-
-	// make sure that the directory exists
-	if (!File::Exists(szDir) || !File::IsDirectory(szDir))
-		File::CreateDir(szDir);
+		SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID + (level != 0 ? "/mips" : "") ;
 
 	// For compatibility with old texture packs, don't print the LOD index for level 0.
-	 // TODO: TLUT format should actually be stored in filename? :/
+	// TODO: TLUT format should actually be stored in filename? :/
 	if (level == 0)
 	{
 		filename = StringFromFormat("%s/%s_%08x_%i.png", szDir.c_str(),
@@ -354,7 +379,7 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 	u32 full_format = texformat;
 	PC_TexFormat pcfmt = PC_TEX_FMT_NONE;
 
-	const bool isPaletteTexture = (texformat == GX_TF_C4 || texformat == GX_TF_C8 || texformat == GX_TF_C14X2);
+	bool isPaletteTexture = (texformat == GX_TF_C4 || texformat == GX_TF_C8 || texformat == GX_TF_C14X2);
 	if (isPaletteTexture)
 		full_format = texformat | (tlutfmt << 16);
 
@@ -366,13 +391,22 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 	else
 		src_data = Memory::GetPointer(address);
 
+	auto entIt = textures.find(texID);
+	
+	bool skipHash = false;
+	bool skipPalette = false;
+
+	//if (entIt != textures.end() && entIt->second->IsEfbCopy() && g_ActiveConfig.bCopyEFBToTexture)
+	//	skipPalette = true;
+
+
 	// TODO: This doesn't hash GB tiles for preloaded RGBA8 textures (instead, it's hashing more data from the low tmem bank than it should)
 	tex_hash = GetHash64(src_data, texture_size, g_ActiveConfig.iSafeTextureCache_ColorSamples);
-	if (isPaletteTexture)
+	if (isPaletteTexture && !skipPalette && !skipHash)
 	{
 		const u32 palette_size = TexDecoder_GetPaletteSize(texformat);
 		tlut_hash = GetHash64(&texMem[tlutaddr], palette_size, g_ActiveConfig.iSafeTextureCache_ColorSamples);
-
+		//tlut_hash = 0;
 		// NOTE: For non-paletted textures, texID is equal to the texture address.
 		//       A paletted texture, however, may have multiple texIDs assigned though depending on the currently used tlut.
 		//       This (changing texID depending on the tlut_hash) is a trick to get around
@@ -386,12 +420,13 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 		tex_hash ^= tlut_hash;
 	}
 
+	//Key key{ }
 	// D3D doesn't like when the specified mipmap count would require more than one 1x1-sized LOD in the mipmap chain
 	// e.g. 64x64 with 7 LODs would have the mipmap chain 64x64,32x32,16x16,8x8,4x4,2x2,1x1,1x1, so we limit the mipmap count to 6 there
 	while (g_ActiveConfig.backend_info.bUseMinimalMipCount && std::max(expandedWidth, expandedHeight) >> maxlevel == 0)
 		--maxlevel;
 
-	TCacheEntryBase *entry = textures[texID];
+	auto entry = textures[texID];
 	if (entry)
 	{
 		// 1. Calculate reference hash:
@@ -464,18 +499,24 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 			using_custom_texture = true;
 		}
 	}
-
+	if(isPaletteTexture) {
+		g_texture_cache->LoadLut( tlutfmt, &texMem[tlutaddr], TexDecoder_GetPaletteSize(texformat) );
+	}
 	if (!using_custom_texture)
 	{
+		
+
 		if (!(texformat == GX_TF_RGBA8 && from_tmem))
 		{
-			pcfmt = TexDecoder_Decode(temp, src_data, expandedWidth,
-						expandedHeight, texformat, tlutaddr, tlutfmt, g_ActiveConfig.backend_info.bUseRGBATextures);
+			pcfmt = PC_TEX_FMT_RGBA32;
+			//pcfmt = TexDecoder_Decode(temp, src_data, expandedWidth,
+			//			expandedHeight, texformat, tlutaddr, tlutfmt, g_ActiveConfig.backend_info.bUseRGBATextures);
 		}
 		else
 		{
-			u8* src_data_gb = &texMem[bpmem.tex[stage/4].texImage2[stage%4].tmem_odd * TMEM_LINE_SIZE];
-			pcfmt = TexDecoder_DecodeRGBA8FromTmem(temp, src_data, src_data_gb, expandedWidth, expandedHeight);
+			//u8* src_data_gb = &texMem[bpmem.tex[stage/4].texImage2[stage%4].tmem_odd * TMEM_LINE_SIZE];
+			//pcfmt = TexDecoder_DecodeRGBA8FromTmem(temp, src_data, src_data_gb, expandedWidth, expandedHeight);
+			pcfmt = PC_TEX_FMT_RGBA32;
 		}
 	}
 
@@ -485,10 +526,15 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 	const bool use_native_mips = use_mipmaps && !using_custom_lods && (width == nativeW && height == nativeH);
 	texLevels = (use_native_mips || using_custom_lods) ? texLevels : 1; // TODO: Should be forced to 1 for non-pow2 textures (e.g. efb copies with automatically adjusted IR)
 
+	src_temp = src_data;
+	src_temp_size = texture_size;
+
+	//NOTICE_LOG(VIDEO,"RAM2TEX : srcp %p srcfmt %d", address, texformat );
+
 	// create the entry/texture
 	if (nullptr == entry)
 	{
-		textures[texID] = entry = g_texture_cache->CreateTexture(width, height, expandedWidth, texLevels, pcfmt);
+		textures[texID] = entry = g_texture_cache->CreateTexture( texformat, width, height, expandedWidth, texLevels, pcfmt);
 
 		// Sometimes, we can get around recreating a texture if only the number of mip levels changes
 		// e.g. if our texture cache entry got too many mipmap levels we can limit the number of used levels by setting the appropriate render states
@@ -502,17 +548,21 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 
 		GFX_DEBUGGER_PAUSE_AT(NEXT_NEW_TEXTURE, true);
 	}
-	else
-	{
+	
+	if (!(texformat == GX_TF_RGBA8 && from_tmem)) {
 		// load texture (CreateTexture also loads level 0)
 		entry->Load(width, height, expandedWidth, 0);
+	} else {
+		u8* src_data_gb = &texMem[bpmem.tex[stage/4].texImage2[stage%4].tmem_odd * TMEM_LINE_SIZE];
+		entry->LoadRGBAFromTMEM(src_data,src_data_gb, width, height, expandedWidth, 0);
 	}
+
 
 	entry->SetGeneralParameters(address, texture_size, full_format, entry->num_mipmaps);
 	entry->SetDimensions(nativeW, nativeH, width, height);
 	entry->hash = tex_hash;
 
-	if (entry->IsEfbCopy() && !g_ActiveConfig.bCopyEFBToTexture)
+	if (skipHash || entry->IsEfbCopy() && !g_ActiveConfig.bCopyEFBToTexture)
 		entry->type = TCET_EC_DYNAMIC;
 	else
 		entry->type = TCET_NORMAL;
@@ -546,8 +596,14 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 				const u8*& mip_src_data = from_tmem
 					? ((level % 2) ? ptr_odd : ptr_even)
 					: src_data;
-				TexDecoder_Decode(temp, mip_src_data, expanded_mip_width, expanded_mip_height, texformat, tlutaddr, tlutfmt, g_ActiveConfig.backend_info.bUseRGBATextures);
+				//TexDecoder_Decode(temp, mip_src_data, expanded_mip_width, expanded_mip_height, texformat, tlutaddr, tlutfmt, g_ActiveConfig.backend_info.bUseRGBATextures);
+				
+				src_temp = mip_src_data;
+				src_temp_size = TexDecoder_GetTextureSizeInBytes(expanded_mip_width, expanded_mip_height, texformat);
+				
 				mip_src_data += TexDecoder_GetTextureSizeInBytes(expanded_mip_width, expanded_mip_height, texformat);
+
+				
 
 				entry->Load(mip_width, mip_height, expanded_mip_width, level);
 
